@@ -32,7 +32,7 @@ const verifyToken = (req, res, next) => {
         console.log(err);
         return res.status(401).send({ message: "Not Authorized" });
       }
-      console.log("decoded user", decoded);
+      // console.log("decoded user", decoded);
       req.user = decoded;
       next();
     });
@@ -89,12 +89,59 @@ async function run() {
       }
     });
 
+    // get all user
+    app.get("/users", async (req, res) => {
+      const users = await userCollection.find().toArray();
+      res.send(users);
+    });
+
     // create new user
     app.post("/users", async (req, res) => {
       const userInfo = req.body;
-      console.log(userInfo);
+      // console.log(userInfo);
       const result = await userCollection.insertOne(userInfo);
       res.send(result);
+    });
+
+    // update user with shop info
+    app.put("/user/addShopInfo", verifyToken, async (req, res) => {
+      const shopDetails = req.body;
+      try {
+        // get user
+        const user = await userCollection.findOne({ email: req.user?.email });
+        if (user) {
+          const updateInfo = {
+            $set: {
+              ...shopDetails,
+            },
+          };
+          const result = await userCollection.updateOne(
+            { email: user.email },
+            updateInfo
+          );
+          res.send(result);
+        }
+      } catch (error) {
+        console.log(error);
+        res.send({ message: error?.message });
+      }
+    });
+
+    // create shop
+    app.post("/shops", verifyToken, async (req, res) => {
+      const shopInfo = req.body;
+      // console.log({ user: req.user, shopInfo });
+      const alreadyHasShop = await shopCollection.findOne({
+        ownerEmail: req.user?.email,
+      });
+      if (!alreadyHasShop) {
+        const response = await shopCollection.insertOne(shopInfo);
+        res.status(201).send(response);
+      } else {
+        res
+          .status(403)
+          .send({ message: "Forbidden, you can not create more than a shop" });
+      }
     });
 
     // Send a ping to confirm a successful connection
