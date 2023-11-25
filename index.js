@@ -2,17 +2,49 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion } = require("mongodb");
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 const app = express();
 const port = process.env.PORT || 5000;
 
 // middlewares
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+    optionsSuccessStatus: 200,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 
+// custom middlewares
+const verifyToken = (req, res, next) => {
+  const token = req.cookies?.userToken;
+  if (!token) {
+    return res.status(401).send({ message: "Not Authorized" });
+  }
+  try {
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+      if (err) {
+        console.log(err);
+        return res.status(401).send({ message: "Not Authorized" });
+      }
+      console.log("decoded user", decoded);
+      req.user = decoded;
+      next();
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Error verifying token" });
+  }
+};
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.y7tfc1b.mongodb.net/?retryWrites=true&w=majority`;
+
+// const localURI = "mongodb://127.0.0.1:27017";
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -27,6 +59,43 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
+
+    // database
+    const database = client.db("inventoryManagement");
+
+    // collections
+    const userCollection = database.collection("users");
+    const shopCollection = database.collection("shops");
+    const productCollection = database.collection("products");
+
+    // create token
+    app.post("/jwt", async (req, res) => {
+      const userInfo = req.body;
+      try {
+        const token = jwt.sign(userInfo, process.env.ACCESS_TOKEN_SECRET, {
+          expiresIn: "1hr",
+        });
+        console.log({ userInfo, token });
+        res
+          .cookie("userToken", token, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: true,
+          })
+          .send({ message: "Token generated Successfully.", userToken: token });
+      } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "Token generating failed." });
+      }
+    });
+
+    // create new user
+    app.post("/users", async (req, res) => {
+      const userInfo = req.body;
+      console.log(userInfo);
+      const result = await userCollection.insertOne(userInfo);
+      res.send(result);
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
