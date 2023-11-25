@@ -75,7 +75,7 @@ async function run() {
         const token = jwt.sign(userInfo, process.env.ACCESS_TOKEN_SECRET, {
           expiresIn: "1hr",
         });
-        console.log({ userInfo, token });
+        // console.log({ userInfo, token });
         res
           .cookie("userToken", token, {
             httpOnly: true,
@@ -135,12 +135,74 @@ async function run() {
         ownerEmail: req.user?.email,
       });
       if (!alreadyHasShop) {
-        const response = await shopCollection.insertOne(shopInfo);
+        const response = await shopCollection.insertOne({
+          ...shopInfo,
+          productLimit: 3,
+        });
         res.status(201).send(response);
       } else {
         res
           .status(403)
           .send({ message: "Forbidden, you can not create more than a shop" });
+      }
+    });
+
+    // get products length for shop (product management)
+    app.get("/products", verifyToken, async (req, res) => {
+      const userEmail = req.user?.email;
+      const products = await productCollection
+        .find({ ownerEmail: userEmail })
+        .toArray();
+      res.send(products);
+    });
+
+    //  create new product
+    app.post("/products", verifyToken, async (req, res) => {
+      const productInfo = req.body;
+      // console.log(productInfo);
+
+      try {
+        const shopInfo = await shopCollection.findOne({
+          ownerEmail: req.user?.email,
+        });
+        if (!shopInfo) {
+          return res.status(403).send({ message: "No Shop found" });
+        }
+
+        const hasLimit = await productCollection
+          .find({ shopId: shopInfo._id })
+          .toArray();
+
+        // console.log({ hasLimit });
+
+        if (hasLimit.length >= shopInfo.productLimit) {
+          return res.status(403).send({ message: "Product Limit reached." });
+        }
+
+        const priceWithVat =
+          parseFloat(productInfo?.productCost) +
+          parseFloat((productInfo?.productCost * 7.5) / 100);
+
+        const sellingPrice = Math.ceil(
+          priceWithVat +
+            parseFloat((priceWithVat * productInfo?.profitMargin) / 100)
+        );
+
+        const productDetails = {
+          ...productInfo,
+          shopId: shopInfo._id,
+          shopName: shopInfo.shopName,
+          ownerEmail: shopInfo.ownerEmail,
+          sellingPrice: sellingPrice,
+          salesCount: 0,
+          createdAt: new Date(),
+        };
+
+        const result = await productCollection.insertOne(productDetails);
+        res.send(result);
+      } catch (error) {
+        console.log(error);
+        res.status(501).send({ message: "something went wrong" });
       }
     });
 
