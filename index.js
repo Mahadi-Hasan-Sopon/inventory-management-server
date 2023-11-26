@@ -68,6 +68,7 @@ async function run() {
     const shopCollection = database.collection("shops");
     const productCollection = database.collection("products");
     const cartCollection = database.collection("carts");
+    const saleCollection = database.collection("sales");
 
     // create token
     app.post("/jwt", async (req, res) => {
@@ -247,8 +248,16 @@ async function run() {
       res.send(result);
     });
 
+    // get cart items by shop
+    app.get("/carts", verifyToken, async (req, res) => {
+      const result = await cartCollection
+        .find({ ownerEmail: req.user?.email })
+        .toArray();
+      res.send(result);
+    });
+
     // add product to cart, (if exist increase quantity)
-    app.put("/cart", verifyToken, async (req, res) => {
+    app.put("/carts", verifyToken, async (req, res) => {
       const product = req.body;
 
       try {
@@ -259,7 +268,7 @@ async function run() {
         if (isExist) {
           const updateQuantity = {
             $set: {
-              productQuantity: isExist.productQuantity + 1,
+              soldQuantity: isExist.soldQuantity + 1,
             },
           };
           const result = await cartCollection.updateOne(
@@ -273,6 +282,62 @@ async function run() {
         }
       } catch (error) {
         res.status(501).send({ message: "Server error occurred." });
+      }
+    });
+
+    // add product to Sales Collection
+    app.post("/sales", async (req, res) => {
+      const soldProducts = req.body;
+      // insert data to sales collection with date time
+      soldProducts.products.forEach((product) => {
+        product["soldAt"] = new Date();
+      });
+
+      try {
+        const salesResult = await saleCollection.insertMany(
+          soldProducts.products,
+          { ordered: true }
+        );
+
+        // Increase sales count and decrease quantity for each product
+        await Promise.all(
+          soldProducts.products.map(async (product) => {
+            const filter = {
+              _id: new ObjectId(product.productId),
+              productQuantity: { $gt: 0 },
+            };
+
+            const updateInfo = {
+              $inc: {
+                salesCount: 1,
+              },
+              $set: {
+                productQuantity: product.productQuantity - product.soldQuantity,
+              },
+            };
+            await productCollection.updateOne(filter, updateInfo);
+          })
+        );
+        // clear cart
+        await Promise.all(
+          soldProducts.products.map(async (product) => {
+            const cartFilter = {
+              ownerEmail: product.ownerEmail,
+              productId: product.productId,
+            };
+            await cartCollection.deleteOne(cartFilter);
+          })
+        );
+
+        res.send({
+          salesResult,
+          message: "Sales data inserted and products updated.",
+        });
+      } catch (error) {
+        console.log("error in sales checkout", error);
+        res.status(500).send({
+          message: "Server error at adding sales and updating products",
+        });
       }
     });
 
