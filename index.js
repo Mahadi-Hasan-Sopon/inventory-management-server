@@ -67,6 +67,7 @@ async function run() {
     const userCollection = database.collection("users");
     const shopCollection = database.collection("shops");
     const productCollection = database.collection("products");
+    const cartCollection = database.collection("carts");
 
     // create token
     app.post("/jwt", async (req, res) => {
@@ -147,7 +148,7 @@ async function run() {
       }
     });
 
-    // get all products
+    // get all products by shop
     app.get("/products", verifyToken, async (req, res) => {
       const userEmail = req.user?.email;
       const products = await productCollection
@@ -235,6 +236,44 @@ async function run() {
       );
 
       res.send(result);
+    });
+
+    // delete a product
+    app.delete("/product/:productId", async (req, res) => {
+      const productId = req.params.productId;
+      const result = await productCollection.deleteOne({
+        _id: new ObjectId(productId),
+      });
+      res.send(result);
+    });
+
+    // add product to cart, (if exist increase quantity)
+    app.put("/cart", verifyToken, async (req, res) => {
+      const product = req.body;
+
+      try {
+        const isExist = await cartCollection.findOne({
+          productId: product.productId,
+        });
+
+        if (isExist) {
+          const updateQuantity = {
+            $set: {
+              productQuantity: isExist.productQuantity + 1,
+            },
+          };
+          const result = await cartCollection.updateOne(
+            { productId: product.productId },
+            updateQuantity
+          );
+          res.send(result);
+        } else {
+          const result = await cartCollection.insertOne(product);
+          res.send(result);
+        }
+      } catch (error) {
+        res.status(501).send({ message: "Server error occurred." });
+      }
     });
 
     // Send a ping to confirm a successful connection
