@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
@@ -147,7 +147,7 @@ async function run() {
       }
     });
 
-    // get products length for shop (product management)
+    // get all products
     app.get("/products", verifyToken, async (req, res) => {
       const userEmail = req.user?.email;
       const products = await productCollection
@@ -156,12 +156,23 @@ async function run() {
       res.send(products);
     });
 
+    // get single product by id
+    app.get("/product/:productId", async (req, res) => {
+      const productId = req.params.productId;
+      console.log({ productId });
+      const result = await productCollection.findOne({
+        _id: new ObjectId(productId),
+      });
+      res.send(result);
+    });
+
     //  create new product
     app.post("/products", verifyToken, async (req, res) => {
       const productInfo = req.body;
       // console.log(productInfo);
 
       try {
+        // get shop info to add product
         const shopInfo = await shopCollection.findOne({
           ownerEmail: req.user?.email,
         });
@@ -169,6 +180,7 @@ async function run() {
           return res.status(403).send({ message: "No Shop found" });
         }
 
+        // check if shop product limit reached
         const hasLimit = await productCollection
           .find({ shopId: shopInfo._id })
           .toArray();
@@ -204,6 +216,25 @@ async function run() {
         console.log(error);
         res.status(501).send({ message: "something went wrong" });
       }
+    });
+
+    // update single product
+    app.put("/product/:productId", verifyToken, async (req, res) => {
+      const productId = req.params.productId;
+      const productInfo = req.body;
+
+      const updatedProduct = {
+        $set: {
+          ...productInfo,
+        },
+      };
+
+      const result = await productCollection.updateOne(
+        { _id: new ObjectId(productId) },
+        updatedProduct
+      );
+
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
