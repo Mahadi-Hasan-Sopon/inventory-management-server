@@ -5,6 +5,8 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -161,7 +163,7 @@ async function run() {
     // get single product by id
     app.get("/product/:productId", async (req, res) => {
       const productId = req.params.productId;
-      console.log({ productId });
+      // console.log({ productId });
       const result = await productCollection.findOne({
         _id: new ObjectId(productId),
       });
@@ -224,6 +226,17 @@ async function run() {
     app.put("/product/:productId", verifyToken, async (req, res) => {
       const productId = req.params.productId;
       const productInfo = req.body;
+
+      const priceWithVat =
+        parseFloat(productInfo?.productCost) +
+        parseFloat((productInfo?.productCost * 7.5) / 100);
+
+      const sellingPrice = Math.ceil(
+        priceWithVat +
+          parseFloat((priceWithVat * productInfo?.profitMargin) / 100)
+      );
+
+      productInfo.sellingPrice = sellingPrice;
 
       const updatedProduct = {
         $set: {
@@ -300,8 +313,9 @@ async function run() {
         );
 
         // Increase sales count and decrease quantity for each product
-        await Promise.all(
-          soldProducts.products.map(async (product) => {
+
+        const updateProductsSalesAndQuantity = soldProducts.products.map(
+          async (product) => {
             const filter = {
               _id: new ObjectId(product.productId),
               productQuantity: { $gt: 0 },
@@ -315,22 +329,29 @@ async function run() {
                 productQuantity: product.productQuantity - product.soldQuantity,
               },
             };
-            await productCollection.updateOne(filter, updateInfo);
-          })
+            const updateResult = await productCollection.updateOne(
+              filter,
+              updateInfo
+            );
+            return updateResult.modifiedCount;
+          }
         );
+        const updateStatus = await Promise.all(updateProductsSalesAndQuantity);
         // clear cart
-        await Promise.all(
-          soldProducts.products.map(async (product) => {
-            const cartFilter = {
-              ownerEmail: product.ownerEmail,
-              productId: product.productId,
-            };
-            await cartCollection.deleteOne(cartFilter);
-          })
-        );
+        const deleteFromCart = soldProducts.products.map(async (product) => {
+          const cartFilter = {
+            ownerEmail: product.ownerEmail,
+            productId: product.productId,
+          };
+          const deleteResult = await cartCollection.deleteOne(cartFilter);
+          return deleteResult.deletedCount;
+        });
+        const deleteStatus = await Promise.all(deleteFromCart);
 
         res.send({
           salesResult,
+          updateStatus,
+          deleteStatus,
           message: "Sales data inserted and products updated.",
         });
       } catch (error) {
@@ -339,6 +360,18 @@ async function run() {
           message: "Server error at adding sales and updating products",
         });
       }
+    });
+
+    // payment intent
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({ clientSecret: paymentIntent.client_secret });
     });
 
     // Send a ping to confirm a successful connection
