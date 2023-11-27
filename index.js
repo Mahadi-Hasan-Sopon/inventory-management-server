@@ -77,7 +77,7 @@ async function run() {
       const userInfo = req.body;
       try {
         const token = jwt.sign(userInfo, process.env.ACCESS_TOKEN_SECRET, {
-          expiresIn: "1hr",
+          expiresIn: "10hr",
         });
         // console.log({ userInfo, token });
         res
@@ -379,8 +379,9 @@ async function run() {
     app.put("/shops/increaseProductLimit", verifyToken, async (req, res) => {
       const userEmail = req.user?.email;
       const { productLimit } = req.body;
+      // get shop info
       const shop = await shopCollection.findOne({ ownerEmail: userEmail });
-
+      // if shop exist of this user update product limit
       if (shop) {
         const updatedLimit = { $set: { productLimit: productLimit } };
         const result = await shopCollection.updateOne(
@@ -390,6 +391,23 @@ async function run() {
         res.send(result);
       } else {
         res.status(404).send({ message: "No shop Found" });
+      }
+    });
+
+    // add admin income based on product limit increase
+    app.patch("/admin/increaseIncome", async (req, res) => {
+      const { income } = req.body;
+      const isUser = await userCollection.findOne({ role: "admin" });
+      // console.log({ isUser, income });
+      if (isUser) {
+        const updatedIncome = {
+          $set: { income: isUser.income + parseInt(income) },
+        };
+        const result = await userCollection.updateOne(
+          { _id: isUser._id },
+          updatedIncome
+        );
+        res.send(result);
       }
     });
 
