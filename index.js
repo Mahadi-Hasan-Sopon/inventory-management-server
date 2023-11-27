@@ -299,7 +299,7 @@ async function run() {
     });
 
     // add product to Sales Collection
-    app.post("/sales", async (req, res) => {
+    app.post("/sales", verifyToken, async (req, res) => {
       const soldProducts = req.body;
       // insert data to sales collection with date time
       soldProducts.products.forEach((product) => {
@@ -363,15 +363,34 @@ async function run() {
     });
 
     // payment intent
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const { price } = req.body;
       const amount = parseInt(price * 100);
+      // console.log({ amount }, "from line 369");
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
         currency: "usd",
         payment_method_types: ["card"],
       });
       res.send({ clientSecret: paymentIntent.client_secret });
+    });
+
+    // increase product limit of shop
+    app.put("/shops/increaseProductLimit", verifyToken, async (req, res) => {
+      const userEmail = req.user?.email;
+      const { productLimit } = req.body;
+      const shop = await shopCollection.findOne({ ownerEmail: userEmail });
+
+      if (shop) {
+        const updatedLimit = { $set: { productLimit: productLimit } };
+        const result = await shopCollection.updateOne(
+          { _id: shop._id },
+          updatedLimit
+        );
+        res.send(result);
+      } else {
+        res.status(404).send({ message: "No shop Found" });
+      }
     });
 
     // Send a ping to confirm a successful connection
