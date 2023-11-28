@@ -410,6 +410,14 @@ async function run() {
       res.send(salesSummary);
     });
 
+    // get all sales by shopId
+    app.get("/sales", verifyToken, async (req, res) => {
+      const userEmail = req.user?.email;
+      const userDetails = await userCollection.findOne({ email: userEmail });
+      const sales = await saleCollection.find({ shopId: userDetails.shopId }).toArray();
+      res.send(sales)
+    });
+
     // payment intent
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const { price } = req.body;
