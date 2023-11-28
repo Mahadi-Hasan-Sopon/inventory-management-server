@@ -362,6 +362,54 @@ async function run() {
       }
     });
 
+    // sales summary {Total Invest, Profit, Sales}
+    app.get("/salesSummary", verifyToken, async (req, res) => {
+      const userEmail = req.user?.email;
+      const userDetails = await userCollection.findOne({ email: userEmail });
+
+      const salesSummary = await saleCollection
+        .aggregate([
+          { $match: { shopId: userDetails.shopId } },
+          {
+            $group: {
+              _id: {
+                $cond: {
+                  if: {
+                    $or: [
+                      { $eq: ["$soldBy.name", null] },
+                      { $eq: ["$soldBy.name", undefined] },
+                    ],
+                  },
+                  then: "anonymous",
+                  else: "$soldBy.name",
+                },
+              },
+              totalSales: {
+                $sum: { $multiply: ["$soldQuantity", "$sellingPrice"] },
+              },
+              totalInvest: {
+                $sum: { $multiply: ["$soldQuantity", "$productCost"] },
+              },
+            },
+          },
+          {
+            $addFields: {
+              totalProfit: {
+                $ceil: {
+                  $multiply: [
+                    { $subtract: ["$totalSales", "$totalInvest"] },
+                    0.925, // 92.5% as a decimal
+                  ],
+                },
+              },
+            },
+          },
+        ])
+        .toArray();
+      console.log(salesSummary);
+      res.send(salesSummary);
+    });
+
     // payment intent
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
       const { price } = req.body;
