@@ -18,10 +18,11 @@ app.use(
       "https://inventory-management-assignment.surge.sh",
       "http://inventory-management-assignment.surge.sh",
       "http://localhost:5173",
+      "*",
     ],
     credentials: true,
     optionsSuccessStatus: 200,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   })
 );
 app.use(express.json());
@@ -515,9 +516,9 @@ async function run() {
     });
 
     // add admin income based on product limit increase
-    app.patch("/admin/increaseIncome", async (req, res) => {
+    app.put("/admin/increaseIncome", async (req, res) => {
       const { income } = req.body;
-      const isUser = await userCollection.findOne({ role: "admin" });
+      const isUser = await adminCollection.findOne({ role: "admin" });
       // console.log({ isUser, income });
       if (isUser) {
         const updatedIncome = {
