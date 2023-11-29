@@ -15,6 +15,8 @@ app.use(
   cors({
     origin: [
       "https://inventory-management-design.web.app",
+      "https://inventory-management-assignment.surge.sh",
+      "http://inventory-management-assignment.surge.sh",
       "http://localhost:5173",
     ],
     credentials: true,
@@ -449,7 +451,7 @@ async function run() {
           },
         ])
         .toArray();
-      console.log(salesSummary);
+      // console.log(salesSummary);
       res.send(salesSummary);
     });
 
