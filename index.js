@@ -13,7 +13,10 @@ const port = process.env.PORT || 5000;
 // middlewares
 app.use(
   cors({
-    origin: ["https://inventory-management-design.web.app"],
+    origin: [
+      "https://inventory-management-design.web.app",
+      "http://localhost:5173",
+    ],
     credentials: true,
     optionsSuccessStatus: 200,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
