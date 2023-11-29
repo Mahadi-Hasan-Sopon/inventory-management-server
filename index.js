@@ -502,6 +502,8 @@ async function run() {
       const { productLimit } = req.body;
       // get shop info
       const shop = await shopCollection.findOne({ ownerEmail: userEmail });
+      // console.log({ shop }, "in line 505");
+
       // if shop exist of this user update product limit
       if (shop) {
         const updatedLimit = { $set: { productLimit: productLimit } };
