@@ -44,6 +44,14 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+const verifyAdmin = async (req, res, next) => {
+  const userEmail = req.user?.email;
+  if (!userEmail) return res.status(403).send({ message: "Forbidden Access" });
+  const user = await userCollection.findOne({ email: userEmail });
+  console.log({ userEmail, user }, "In verify admin middleware");
+  next();
+};
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.y7tfc1b.mongodb.net/?retryWrites=true&w=majority`;
 
 // const localURI = "mongodb://127.0.0.1:27017";
@@ -91,6 +99,26 @@ async function run() {
         console.log(error);
         res.status(500).json({ message: "Token generating failed." });
       }
+    });
+
+    // get logged in user is admin or not
+    app.get("/users/isAdmin/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await userCollection.findOne({ email: email });
+      let isAdmin = false;
+      if (user) {
+        isAdmin = user?.role === "admin";
+      }
+      res.send(isAdmin);
+    });
+
+    //  check if user own a shop
+    app.get("/hasShop", verifyToken, async (req, res) => {
+      const userEmail = req.user?.email;
+      const user = await userCollection.findOne({ email: userEmail });
+      if (!user) return res.status(401).send("Unauthorized Access.");
+      const hasShop = user?.shopId;
+      res.send(hasShop);
     });
 
     // get all user
@@ -362,7 +390,7 @@ async function run() {
       }
     });
 
-    // sales summary {Total Invest, Profit, Sales}
+    // sales summary of shop {Total Invest, Profit, Sales}
     app.get("/salesSummary", verifyToken, async (req, res) => {
       const userEmail = req.user?.email;
       const userDetails = await userCollection.findOne({ email: userEmail });
@@ -414,8 +442,16 @@ async function run() {
     app.get("/sales", verifyToken, async (req, res) => {
       const userEmail = req.user?.email;
       const userDetails = await userCollection.findOne({ email: userEmail });
-      const sales = await saleCollection.find({ shopId: userDetails.shopId }).toArray();
-      res.send(sales)
+      const sales = await saleCollection
+        .find({ shopId: userDetails.shopId })
+        .toArray();
+      res.send(sales);
+    });
+
+    // get all sales for admin
+    app.get("/allSales", verifyToken, verifyAdmin, async (req, res) => {
+      const sales = await saleCollection.find().toArray();
+      res.send(sales);
     });
 
     // payment intent
