@@ -524,7 +524,7 @@ async function run() {
         const updatedIncome = {
           $set: { income: isUser.income + parseInt(income) },
         };
-        const result = await userCollection.updateOne(
+        const result = await adminCollection.updateOne(
           { _id: isUser._id },
           updatedIncome
         );
