@@ -66,6 +66,7 @@ async function run() {
     const database = client.db("inventoryManagement");
 
     // collections
+    const adminCollection = database.collection("admins");
     const userCollection = database.collection("users");
     const shopCollection = database.collection("shops");
     const productCollection = database.collection("products");
@@ -97,16 +98,19 @@ async function run() {
       const userEmail = req.user?.email;
       if (!userEmail)
         return res.status(403).send({ message: "Forbidden Access" });
-      const user = await userCollection.findOne({ email: userEmail });
+      const isAdmin = await adminCollection.findOne({ email: userEmail });
       // console.log({ userEmail, user }, "In verify admin middleware");
-      req.admin = user;
+      if (!isAdmin) {
+        return res.status(401).send({ message: "Unauthorized Access" });
+      }
+      req.admin = isAdmin;
       next();
     };
 
     // get logged in user is admin or not
     app.get("/users/isAdmin/:email", async (req, res) => {
       const email = req.params.email;
-      const user = await userCollection.findOne({ email: email });
+      const user = await adminCollection.findOne({ email: email });
       let isAdmin = false;
       if (user) {
         isAdmin = user?.role === "admin";
@@ -118,13 +122,12 @@ async function run() {
     app.get("/hasShop", verifyToken, async (req, res) => {
       const userEmail = req.user?.email;
       const user = await userCollection.findOne({ email: userEmail });
-      if (!user) return res.status(401).send("Unauthorized Access.");
       const hasShop = user?.shopId ? true : false;
       res.send(hasShop);
     });
 
-    // get all user
-    app.get("/users", async (req, res) => {
+    // get all user - Admin
+    app.get("/admin/allUser", verifyToken, verifyAdmin, async (req, res) => {
       const users = await userCollection.find().toArray();
       res.send(users);
     });
@@ -457,7 +460,7 @@ async function run() {
       res.send(sales);
     });
 
-    // get all sales for admin
+    // get all sales summary for admin
     app.get(
       "/admin/salesSummary",
       verifyToken,
