@@ -44,14 +44,6 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-const verifyAdmin = async (req, res, next) => {
-  const userEmail = req.user?.email;
-  if (!userEmail) return res.status(403).send({ message: "Forbidden Access" });
-  const user = await userCollection.findOne({ email: userEmail });
-  console.log({ userEmail, user }, "In verify admin middleware");
-  next();
-};
-
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.y7tfc1b.mongodb.net/?retryWrites=true&w=majority`;
 
 // const localURI = "mongodb://127.0.0.1:27017";
@@ -101,6 +93,16 @@ async function run() {
       }
     });
 
+    const verifyAdmin = async (req, res, next) => {
+      const userEmail = req.user?.email;
+      if (!userEmail)
+        return res.status(403).send({ message: "Forbidden Access" });
+      const user = await userCollection.findOne({ email: userEmail });
+      // console.log({ userEmail, user }, "In verify admin middleware");
+      req.admin = user;
+      next();
+    };
+
     // get logged in user is admin or not
     app.get("/users/isAdmin/:email", async (req, res) => {
       const email = req.params.email;
@@ -117,7 +119,7 @@ async function run() {
       const userEmail = req.user?.email;
       const user = await userCollection.findOne({ email: userEmail });
       if (!user) return res.status(401).send("Unauthorized Access.");
-      const hasShop = user?.shopId;
+      const hasShop = user?.shopId ? true : false;
       res.send(hasShop);
     });
 
@@ -157,6 +159,12 @@ async function run() {
         console.log(error);
         res.send({ message: error?.message });
       }
+    });
+
+    // get all shops - Admin
+    app.get("/allShop", verifyToken, verifyAdmin, async (req, res) => {
+      const shops = await shopCollection.find().toArray();
+      res.send(shops);
     });
 
     // create shop
@@ -351,7 +359,7 @@ async function run() {
 
             const updateInfo = {
               $inc: {
-                salesCount: 1,
+                salesCount: product.soldQuantity,
               },
               $set: {
                 productQuantity: product.productQuantity - product.soldQuantity,
@@ -365,6 +373,7 @@ async function run() {
           }
         );
         const updateStatus = await Promise.all(updateProductsSalesAndQuantity);
+
         // clear cart
         const deleteFromCart = soldProducts.products.map(async (product) => {
           const cartFilter = {
@@ -449,10 +458,21 @@ async function run() {
     });
 
     // get all sales for admin
-    app.get("/allSales", verifyToken, verifyAdmin, async (req, res) => {
-      const sales = await saleCollection.find().toArray();
-      res.send(sales);
-    });
+    app.get(
+      "/admin/salesSummary",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        const adminIncome = req.admin?.income;
+        const totalProducts = await productCollection.estimatedDocumentCount();
+        const products = await productCollection.find().toArray();
+        const totalSales = products.reduce(
+          (acc, cur) => acc + parseInt(cur.salesCount * cur.sellingPrice),
+          0
+        );
+        res.send({ totalSales, adminIncome, totalProducts });
+      }
+    );
 
     // payment intent
     app.post("/create-payment-intent", verifyToken, async (req, res) => {
